@@ -8,7 +8,7 @@ from langchain.schema.output_parser import StrOutputParser
 
 # --- Configuración de la Página de Streamlit ---
 st.set_page_config(page_title="Agente Web Scraper IA", page_icon="🤖")
-st.title("🤖 Agente Web Scraper con Gemini 1.5 Pro")
+st.title("🤖 Agente IA Web Scraper")
 st.caption("Introduce la URL de un sitio web para extraer y ESTRUCTURAR su contenido.")
 
 # --- Configuración del Modelo de Lenguaje (LLM) ---
@@ -133,3 +133,4 @@ if st.button("🚀 Iniciar Escaneo"):
         st.markdown(contenido_final)
     else:
         st.error("Por favor, introduce una URL válida.")
+
