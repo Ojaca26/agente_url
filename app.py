@@ -8,8 +8,8 @@ from langchain.schema.output_parser import StrOutputParser
 
 # --- Configuración de la Página de Streamlit ---
 st.set_page_config(page_title="Agente Web Scraper IA", page_icon="🤖")
-st.title("🤖 Agente IA Web Scraper")
-st.caption("Introduce la URL de un sitio web para extraer y resumir su contenido principal.")
+st.title("🤖 Agente Web Scraper con Gemini 1.5 Pro")
+st.caption("Introduce la URL de un sitio web para extraer y ESTRUCTURAR su contenido.")
 
 # --- Configuración del Modelo de Lenguaje (LLM) ---
 # Para despliegue en Streamlit Cloud, usa st.secrets
@@ -20,13 +20,13 @@ except Exception:
     st.stop()
 
 
-# --- Funciones de Web Scraping (las mismas de antes) ---
+# --- Funciones de Web Scraping ---
 
 def es_valido(url):
     """Verifica si una URL es válida."""
     parsed = urlparse(url)
     esquema_valido = bool(parsed.netloc) and bool(parsed.scheme)
-    extensiones_excluidas = ['.pdf', '.jpg', '.png', '.zip', '.docx', '.gif']
+    extensiones_excluidas = ['.pdf', '.jpg', '.png', '.zip', '.docx', '.gif', '.mp3', '.mp4']
     no_es_archivo = not any(parsed.path.lower().endswith(ext) for ext in extensiones_excluidas)
     return esquema_valido and no_es_archivo
 
@@ -62,34 +62,40 @@ def extraer_texto(url):
         st.warning(f"No se pudo extraer texto de {url}: {e}")
         return ""
 
-# --- Lógica del Agente con LangChain ---
+# --- Lógica del Agente con LangChain (Versión que no resume) ---
 
-def analizar_y_resumir_contenido(texto_pagina, url):
-    """Utiliza el LLM para resumir y estructurar el contenido de una página."""
+def analizar_y_estructurar_contenido(texto_pagina, url):
+    """
+    Utiliza el LLM para ESTRUCTURAR todo el contenido de una página, SIN RESUMIR.
+    """
     if not texto_pagina:
         return "No se encontró contenido textual para analizar."
 
-    plantilla = """
-    Eres un asistente de IA experto en analizar y estructurar contenido web.
-    A partir del siguiente texto extraído de la URL '{url}', realiza estas tareas:
-    1. Genera un título claro y conciso para esta página.
-    2. Resume el contenido principal en 2 o 3 párrafos.
-    3. Extrae los puntos o ideas clave en una lista de viñetas.
+    plantilla_nueva = """
+    Eres un asistente de IA experto en analizar y documentar contenido web de forma exhaustiva.
+    Tu tarea es procesar el texto extraído de la URL '{url}' y presentarlo de forma completa y bien organizada. **No debes resumir, acortar ni omitir información relevante.**
+
+    Realiza las siguientes acciones con el texto proporcionado:
+    1.  Genera un título descriptivo que refleje el contenido principal de la página.
+    2.  Identifica las diferentes secciones, temas o apartados principales del texto.
+    3.  Para cada sección identificada, extrae y presenta TODA la información correspondiente. Usa subtítulos en formato Markdown (ej: ## Título de la Sección) para separar cada tema.
+    4.  El resultado final debe ser una transcripción fiel y estructurada del contenido original, ideal para ser guardada en un documento.
 
     Contenido de la página:
     ---
     {texto}
     ---
 
-    Presenta el resultado de forma organizada y clara usando formato Markdown.
+    Presenta el resultado completo y estructurado.
     """
-    prompt = ChatPromptTemplate.from_template(plantilla)
+    prompt = ChatPromptTemplate.from_template(plantilla_nueva)
     cadena = prompt | llm | StrOutputParser()
-    
-    # Limita la cantidad de texto para no exceder los límites del modelo
-    texto_limitado = texto_pagina[:20000] 
-    
+
+    # Se limita la cantidad de texto por si la página es extremadamente larga
+    texto_limitado = texto_pagina[:30000]
+
     return cadena.invoke({"texto": texto_limitado, "url": url})
+
 
 # --- Interfaz de Usuario de Streamlit ---
 
@@ -101,20 +107,21 @@ if st.button("🚀 Iniciar Escaneo"):
             enlaces_a_visitar = list(obtener_enlaces_pagina(url_usuario))
             enlaces_a_visitar.insert(0, url_usuario)
             visitados = set()
-            contenido_final = f"#  रिपोर्ट सारांश: {urlparse(url_usuario).netloc}\n\n"
+            contenido_final = f"# Reporte de Contenido Web: {urlparse(url_usuario).netloc}\n\n"
 
         max_paginas = st.slider("Número máximo de páginas a analizar:", 1, 20, 5)
         barra_progreso = st.progress(0)
-        
+
         for i, enlace in enumerate(enlaces_a_visitar[:max_paginas]):
             if enlace not in visitados:
                 visitados.add(enlace)
-                with st.spinner(f"Analizando página {i+1}/{max_paginas}: {enlace}"):
+                with st.spinner(f"Analizando página {i+1}/{len(enlaces_a_visitar[:max_paginas])}: {enlace}"):
                     texto = extraer_texto(enlace)
                     if texto:
-                        resumen = analizar_y_resumir_contenido(texto, enlace)
-                        contenido_final += f"## Página Analizada: {enlace}\n\n{resumen}\n\n---\n\n"
-                        st.write(f"✅ Resumen generado para: {enlace}")
+                        # Llamada a la nueva función que ESTRUCTURA en vez de resumir
+                        contenido_estructurado = analizar_y_estructurar_contenido(texto, enlace)
+                        contenido_final += f"## Página Analizada: {enlace}\n\n{contenido_estructurado}\n\n---\n\n"
+                        st.write(f"✅ Contenido estructurado para: {enlace}")
                     else:
                         st.write(f"⚠️ No se pudo extraer texto de: {enlace}")
 
@@ -122,8 +129,7 @@ if st.button("🚀 Iniciar Escaneo"):
 
         st.success("¡Escaneo completado!")
         st.markdown("---")
-        st.header("📄 Resumen del Contenido del Sitio Web")
+        st.header("📄 Contenido Estructurado del Sitio Web")
         st.markdown(contenido_final)
     else:
-
         st.error("Por favor, introduce una URL válida.")
