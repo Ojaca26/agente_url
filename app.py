@@ -14,12 +14,14 @@ st.caption("Introduce la URL de un sitio web para extraer y ESTRUCTURAR su conte
 # --- Configuración del Modelo de Lenguaje (LLM) ---
 # Para despliegue en Streamlit Cloud, usa st.secrets
 try:
-    llm = ChatGoogleGenerativeAI(model="gemini-1.5-pro-latest", google_api_key=st.secrets["GOOGLE_API_KEY"])
-except Exception:
-    st.error("Error al configurar el modelo de IA. Asegúrate de que tu GOOGLE_API_KEY esté configurada en los secretos de Streamlit.")
+    llm = ChatGoogleGenerativeAI(
+        model="gemini-1.5-pro",  # ✅ modelo estable y soportado
+        google_api_key=st.secrets["GOOGLE_API_KEY"]
+    )
+except Exception as e:
+    st.error(f"Error al configurar el modelo de IA: {e}")
     st.stop()
-
-
+    
 # --- Funciones de Web Scraping ---
 
 def es_valido(url):
@@ -133,4 +135,5 @@ if st.button("🚀 Iniciar Escaneo"):
         st.markdown(contenido_final)
     else:
         st.error("Por favor, introduce una URL válida.")
+
 
