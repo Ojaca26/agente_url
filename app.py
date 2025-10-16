@@ -12,16 +12,20 @@ st.title("🤖 Agente IA Web Scraper")
 st.caption("Introduce la URL de un sitio web para extraer y ESTRUCTURAR su contenido.")
 
 # --- Configuración del Modelo de Lenguaje (LLM) ---
-# Para despliegue en Streamlit Cloud, usa st.secrets
+# ⚠️ Requiere librerías actualizadas:
+# pip install -U google-generativeai langchain-google-genai
+
 try:
     llm = ChatGoogleGenerativeAI(
-        model="gemini-1.5-pro",  # ✅ modelo estable y soportado
+        model="models/gemini-1.5-pro",  # ✅ usa prefijo "models/" (obligatorio en v1)
         google_api_key=st.secrets["GOOGLE_API_KEY"]
     )
+    st.success("✅ Conectado al modelo Gemini correctamente.")
 except Exception as e:
-    st.error(f"Error al configurar el modelo de IA: {e}")
+    st.error(f"❌ Error al configurar el modelo de IA: {e}")
     st.stop()
-    
+
+
 # --- Funciones de Web Scraping ---
 
 def es_valido(url):
@@ -31,6 +35,7 @@ def es_valido(url):
     extensiones_excluidas = ['.pdf', '.jpg', '.png', '.zip', '.docx', '.gif', '.mp3', '.mp4']
     no_es_archivo = not any(parsed.path.lower().endswith(ext) for ext in extensiones_excluidas)
     return esquema_valido and no_es_archivo
+
 
 def obtener_enlaces_pagina(url):
     """Obtiene todos los enlaces válidos de una página web."""
@@ -46,9 +51,10 @@ def obtener_enlaces_pagina(url):
             url_absoluta = urljoin(dominio_base, href)
             if urlparse(url_absoluta).netloc == urlparse(dominio_base).netloc and es_valido(url_absoluta):
                 urls.add(url_absoluta)
-    except (requests.exceptions.RequestException, requests.exceptions.HTTPError) as e:
+    except Exception as e:
         st.warning(f"No se pudo acceder a {url}: {e}")
     return urls
+
 
 def extraer_texto(url):
     """Extrae el texto principal de una página web."""
@@ -60,9 +66,10 @@ def extraer_texto(url):
             script_o_estilo.decompose()
         texto = " ".join(t.strip() for t in sopa.stripped_strings)
         return texto
-    except (requests.exceptions.RequestException, requests.exceptions.HTTPError) as e:
+    except Exception as e:
         st.warning(f"No se pudo extraer texto de {url}: {e}")
         return ""
+
 
 # --- Lógica del Agente con LangChain (Versión que no resume) ---
 
@@ -75,28 +82,30 @@ def analizar_y_estructurar_contenido(texto_pagina, url):
 
     plantilla_nueva = """
     Eres un asistente de IA experto en analizar y documentar contenido web de forma exhaustiva.
-    Tu tarea es procesar el texto extraído de la URL '{url}' y presentarlo de forma completa y bien organizada. **No debes resumir, acortar ni omitir información relevante.**
+    Tu tarea es procesar el texto extraído de la URL '{url}' y presentarlo de forma completa y bien organizada. 
+    **No debes resumir, acortar ni omitir información relevante.**
 
     Realiza las siguientes acciones con el texto proporcionado:
-    1.  Genera un título descriptivo que refleje el contenido principal de la página.
-    2.  Identifica las diferentes secciones, temas o apartados principales del texto.
-    3.  Para cada sección identificada, extrae y presenta TODA la información correspondiente. Usa subtítulos en formato Markdown (ej: ## Título de la Sección) para separar cada tema.
-    4.  El resultado final debe ser una transcripción fiel y estructurada del contenido original, ideal para ser guardada en un documento.
+    1. Genera un título descriptivo que refleje el contenido principal de la página.
+    2. Identifica las diferentes secciones o temas principales.
+    3. Para cada sección, presenta TODA la información correspondiente usando subtítulos Markdown (##).
+    4. Devuelve una transcripción estructurada fiel al contenido original.
 
     Contenido de la página:
     ---
     {texto}
     ---
-
-    Presenta el resultado completo y estructurado.
     """
+
     prompt = ChatPromptTemplate.from_template(plantilla_nueva)
     cadena = prompt | llm | StrOutputParser()
-
-    # Se limita la cantidad de texto por si la página es extremadamente larga
     texto_limitado = texto_pagina[:30000]
 
-    return cadena.invoke({"texto": texto_limitado, "url": url})
+    try:
+        return cadena.invoke({"texto": texto_limitado, "url": url})
+    except Exception as e:
+        st.warning(f"Error procesando {url}: {e}")
+        return "⚠️ No se pudo estructurar el contenido de esta página."
 
 
 # --- Interfaz de Usuario de Streamlit ---
@@ -120,7 +129,6 @@ if st.button("🚀 Iniciar Escaneo"):
                 with st.spinner(f"Analizando página {i+1}/{len(enlaces_a_visitar[:max_paginas])}: {enlace}"):
                     texto = extraer_texto(enlace)
                     if texto:
-                        # Llamada a la nueva función que ESTRUCTURA en vez de resumir
                         contenido_estructurado = analizar_y_estructurar_contenido(texto, enlace)
                         contenido_final += f"## Página Analizada: {enlace}\n\n{contenido_estructurado}\n\n---\n\n"
                         st.write(f"✅ Contenido estructurado para: {enlace}")
@@ -135,5 +143,3 @@ if st.button("🚀 Iniciar Escaneo"):
         st.markdown(contenido_final)
     else:
         st.error("Por favor, introduce una URL válida.")
-
-
