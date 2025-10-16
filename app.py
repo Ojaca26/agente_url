@@ -33,7 +33,7 @@ try:
 
     # --- Inicializa el modelo principal ---
     llm = ChatGoogleGenerativeAI(
-        model="models/gemini-1.5-pro",  # 👈 usa multimodal si tu clave lo soporta
+        model="models/gemini-2.5-pro",  # 👈 usa multimodal si tu clave lo soporta
         google_api_key=api_key
     )
 
@@ -139,3 +139,4 @@ if st.button("🚀 Iniciar Escaneo"):
         st.markdown(contenido_final)
     else:
         st.error("Por favor, introduce una URL válida.")
+
