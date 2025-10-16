@@ -2,6 +2,7 @@ import streamlit as st
 import requests
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin, urlparse
+import google.generativeai as genai  # 🟢 IMPORTACIÓN DIRECTA DEL SDK NUEVO
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain.prompts import ChatPromptTemplate
 from langchain.schema.output_parser import StrOutputParser
@@ -12,19 +13,21 @@ st.title("🤖 Agente IA Web Scraper")
 st.caption("Introduce la URL de un sitio web para extraer y ESTRUCTURAR su contenido.")
 
 # --- Configuración del Modelo de Lenguaje (LLM) ---
-# ⚠️ Requiere librerías actualizadas:
-# pip install -U google-generativeai langchain-google-genai
-
 try:
+    # 🟢 Inicializa correctamente la API v1 estable
+    genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
+
+    # 🟢 Usa la ruta correcta del modelo con la versión estable
     llm = ChatGoogleGenerativeAI(
-        model="models/gemini-1.5-pro",  # ✅ usa prefijo "models/" (obligatorio en v1)
+        model="models/gemini-1.5-pro",  # obligatorio el prefijo “models/”
         google_api_key=st.secrets["GOOGLE_API_KEY"]
     )
-    st.success("✅ Conectado al modelo Gemini correctamente.")
+
+    st.success("✅ Conectado al modelo Gemini correctamente (API v1 estable).")
+
 except Exception as e:
     st.error(f"❌ Error al configurar el modelo de IA: {e}")
     st.stop()
-
 
 # --- Funciones de Web Scraping ---
 
@@ -143,3 +146,4 @@ if st.button("🚀 Iniciar Escaneo"):
         st.markdown(contenido_final)
     else:
         st.error("Por favor, introduce una URL válida.")
+
