@@ -2,37 +2,47 @@ import streamlit as st
 import requests
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin, urlparse
-import google.generativeai as genai  # 🟢 IMPORTACIÓN DIRECTA DEL SDK NUEVO
+import google.generativeai as genai
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain.prompts import ChatPromptTemplate
 from langchain.schema.output_parser import StrOutputParser
+import os
 
-# --- Configuración de la Página de Streamlit ---
+# --- Configuración de la página ---
 st.set_page_config(page_title="Agente Web Scraper IA", page_icon="🤖")
 st.title("🤖 Agente IA Web Scraper")
 st.caption("Introduce la URL de un sitio web para extraer y ESTRUCTURAR su contenido.")
 
-# --- Configuración del Modelo de Lenguaje (LLM) ---
+# --- Inicializar API de Gemini ---
 try:
-    # 🟢 Inicializa correctamente la API v1 estable
-    genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
+    api_key = st.secrets["GOOGLE_API_KEY"]
+    os.environ["GOOGLE_API_KEY"] = api_key
+    genai.configure(api_key=api_key)
 
-    # 🟢 Usa la ruta correcta del modelo con la versión estable
-    llm = ChatGoogleGenerativeAI(
-        model="models/gemini-1.5-pro",  # obligatorio el prefijo “models/”
-        google_api_key=st.secrets["GOOGLE_API_KEY"]
-    )
-
+    # --- Diagnóstico visual ---
     st.success("✅ Conectado al modelo Gemini correctamente (API v1 estable).")
+    st.write("🔐 Clave cargada correctamente.")
+
+    # --- Mostrar modelos disponibles (opcional para depuración) ---
+    try:
+        modelos = genai.list_models()
+        disponibles = [m.name for m in modelos]
+        st.write("📦 Modelos detectados por tu API key:", disponibles)
+    except Exception as e:
+        st.warning(f"No se pudieron listar los modelos: {e}")
+
+    # --- Inicializa el modelo principal ---
+    llm = ChatGoogleGenerativeAI(
+        model="models/gemini-1.5-pro",  # 👈 usa multimodal si tu clave lo soporta
+        google_api_key=api_key
+    )
 
 except Exception as e:
     st.error(f"❌ Error al configurar el modelo de IA: {e}")
     st.stop()
 
 # --- Funciones de Web Scraping ---
-
 def es_valido(url):
-    """Verifica si una URL es válida."""
     parsed = urlparse(url)
     esquema_valido = bool(parsed.netloc) and bool(parsed.scheme)
     extensiones_excluidas = ['.pdf', '.jpg', '.png', '.zip', '.docx', '.gif', '.mp3', '.mp4']
@@ -41,32 +51,29 @@ def es_valido(url):
 
 
 def obtener_enlaces_pagina(url):
-    """Obtiene todos los enlaces válidos de una página web."""
     urls = set()
     try:
-        respuesta = requests.get(url, timeout=10, headers={'User-Agent': 'Mozilla/5.0'})
-        respuesta.raise_for_status()
-        sopa = BeautifulSoup(respuesta.content, 'html.parser')
-        dominio_base = f"{urlparse(url).scheme}://{urlparse(url).netloc}"
-
+        r = requests.get(url, timeout=10, headers={'User-Agent': 'Mozilla/5.0'})
+        r.raise_for_status()
+        sopa = BeautifulSoup(r.content, 'html.parser')
+        base = f"{urlparse(url).scheme}://{urlparse(url).netloc}"
         for link in sopa.find_all('a', href=True):
             href = link['href']
-            url_absoluta = urljoin(dominio_base, href)
-            if urlparse(url_absoluta).netloc == urlparse(dominio_base).netloc and es_valido(url_absoluta):
-                urls.add(url_absoluta)
+            absoluta = urljoin(base, href)
+            if urlparse(absoluta).netloc == urlparse(base).netloc and es_valido(absoluta):
+                urls.add(absoluta)
     except Exception as e:
         st.warning(f"No se pudo acceder a {url}: {e}")
     return urls
 
 
 def extraer_texto(url):
-    """Extrae el texto principal de una página web."""
     try:
-        respuesta = requests.get(url, timeout=10, headers={'User-Agent': 'Mozilla/5.0'})
-        respuesta.raise_for_status()
-        sopa = BeautifulSoup(respuesta.content, 'html.parser')
-        for script_o_estilo in sopa(["script", "style"]):
-            script_o_estilo.decompose()
+        r = requests.get(url, timeout=10, headers={'User-Agent': 'Mozilla/5.0'})
+        r.raise_for_status()
+        sopa = BeautifulSoup(r.content, 'html.parser')
+        for s in sopa(["script", "style"]):
+            s.decompose()
         texto = " ".join(t.strip() for t in sopa.stripped_strings)
         return texto
     except Exception as e:
@@ -74,76 +81,61 @@ def extraer_texto(url):
         return ""
 
 
-# --- Lógica del Agente con LangChain (Versión que no resume) ---
-
+# --- Función IA para estructurar contenido ---
 def analizar_y_estructurar_contenido(texto_pagina, url):
-    """
-    Utiliza el LLM para ESTRUCTURAR todo el contenido de una página, SIN RESUMIR.
-    """
     if not texto_pagina:
         return "No se encontró contenido textual para analizar."
 
-    plantilla_nueva = """
-    Eres un asistente de IA experto en analizar y documentar contenido web de forma exhaustiva.
-    Tu tarea es procesar el texto extraído de la URL '{url}' y presentarlo de forma completa y bien organizada. 
-    **No debes resumir, acortar ni omitir información relevante.**
+    plantilla = """
+    Eres un asistente de IA experto en analizar y documentar contenido web.
+    Procesa el texto de la URL '{url}' y preséntalo completo, organizado por secciones.
+    Usa Markdown (## para secciones). No resumas ni omitas detalles.
 
-    Realiza las siguientes acciones con el texto proporcionado:
-    1. Genera un título descriptivo que refleje el contenido principal de la página.
-    2. Identifica las diferentes secciones o temas principales.
-    3. Para cada sección, presenta TODA la información correspondiente usando subtítulos Markdown (##).
-    4. Devuelve una transcripción estructurada fiel al contenido original.
-
-    Contenido de la página:
+    Contenido:
     ---
     {texto}
     ---
     """
-
-    prompt = ChatPromptTemplate.from_template(plantilla_nueva)
+    prompt = ChatPromptTemplate.from_template(plantilla)
     cadena = prompt | llm | StrOutputParser()
     texto_limitado = texto_pagina[:30000]
 
     try:
         return cadena.invoke({"texto": texto_limitado, "url": url})
     except Exception as e:
-        st.warning(f"Error procesando {url}: {e}")
+        st.warning(f"⚠️ Error procesando {url}: {e}")
         return "⚠️ No se pudo estructurar el contenido de esta página."
 
 
-# --- Interfaz de Usuario de Streamlit ---
-
+# --- Interfaz principal ---
 url_usuario = st.text_input("🔗 Introduce la URL del sitio web a escanear:", placeholder="https://ejemplo.com")
 
 if st.button("🚀 Iniciar Escaneo"):
     if url_usuario and es_valido(url_usuario):
         with st.spinner('🔍 Buscando enlaces en la página principal...'):
-            enlaces_a_visitar = list(obtener_enlaces_pagina(url_usuario))
-            enlaces_a_visitar.insert(0, url_usuario)
-            visitados = set()
-            contenido_final = f"# Reporte de Contenido Web: {urlparse(url_usuario).netloc}\n\n"
+            enlaces = list(obtener_enlaces_pagina(url_usuario))
+            enlaces.insert(0, url_usuario)
+            visitados, contenido_final = set(), f"# Reporte: {urlparse(url_usuario).netloc}\n\n"
 
         max_paginas = st.slider("Número máximo de páginas a analizar:", 1, 20, 5)
-        barra_progreso = st.progress(0)
+        barra = st.progress(0)
 
-        for i, enlace in enumerate(enlaces_a_visitar[:max_paginas]):
+        for i, enlace in enumerate(enlaces[:max_paginas]):
             if enlace not in visitados:
                 visitados.add(enlace)
-                with st.spinner(f"Analizando página {i+1}/{len(enlaces_a_visitar[:max_paginas])}: {enlace}"):
+                with st.spinner(f"Analizando página {i+1}/{len(enlaces[:max_paginas])}: {enlace}"):
                     texto = extraer_texto(enlace)
                     if texto:
-                        contenido_estructurado = analizar_y_estructurar_contenido(texto, enlace)
-                        contenido_final += f"## Página Analizada: {enlace}\n\n{contenido_estructurado}\n\n---\n\n"
+                        resultado = analizar_y_estructurar_contenido(texto, enlace)
+                        contenido_final += f"## Página: {enlace}\n\n{resultado}\n\n---\n\n"
                         st.write(f"✅ Contenido estructurado para: {enlace}")
                     else:
                         st.write(f"⚠️ No se pudo extraer texto de: {enlace}")
+                barra.progress((i + 1) / max_paginas)
 
-                barra_progreso.progress((i + 1) / max_paginas)
-
-        st.success("¡Escaneo completado!")
+        st.success("🎯 Escaneo completado")
         st.markdown("---")
-        st.header("📄 Contenido Estructurado del Sitio Web")
+        st.header("📄 Contenido Estructurado")
         st.markdown(contenido_final)
     else:
         st.error("Por favor, introduce una URL válida.")
-
