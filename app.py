@@ -167,7 +167,7 @@ if st.button("🚀 Iniciar Escaneo y Generar Prompt"):
                         resultado = analizar_y_estructurar_contenido(texto, enlace)
                         contenido_final += f"## Página: {enlace}\n\n{resultado}\n\n---\n\n"
                     barra.progress((i + 1) / max_paginas)
-                time.sleep(30)
+                time.sleep(5)
 
         st.success("✅ Contenido estructurado correctamente")
         st.markdown("---")
@@ -195,6 +195,7 @@ if st.button("🚀 Iniciar Escaneo y Generar Prompt"):
             )
     else:
         st.error("Por favor, introduce una URL válida.")
+
 
 
 
