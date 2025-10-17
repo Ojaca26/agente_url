@@ -153,7 +153,8 @@ if st.button("🚀 Iniciar Escaneo y Generar Prompt"):
             enlaces.insert(0, url_usuario)
             visitados, contenido_final = set(), f"# Reporte: {urlparse(url_usuario).netloc}\n\n"
 
-        max_paginas = st.slider("Número máximo de páginas a analizar:", 1, 20, 10)
+        max_paginas = min(len(enlaces), 20)
+        st.info(f"🔎 Se analizarán automáticamente {max_paginas} páginas encontradas en el sitio (límite máximo: 20).")
         barra = st.progress(0)
 
         for i, enlace in enumerate(enlaces[:max_paginas]):
@@ -192,4 +193,5 @@ if st.button("🚀 Iniciar Escaneo y Generar Prompt"):
             )
     else:
         st.error("Por favor, introduce una URL válida.")
+
 
