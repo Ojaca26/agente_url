@@ -7,6 +7,7 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain.prompts import ChatPromptTemplate
 from langchain.schema.output_parser import StrOutputParser
 import os
+import time
 
 # --- Configuración de la página ---
 st.set_page_config(page_title="Agente URL → Prompt Bot Asesor", page_icon="🤖")
@@ -21,7 +22,7 @@ try:
 
     st.success("✅ Conectado correctamente al modelo Gemini.")
     llm = ChatGoogleGenerativeAI(
-        model="models/gemini-2.5-pro",
+        model="models/gemini-2.5-flash",
         google_api_key=api_key
     )
 except Exception as e:
@@ -166,6 +167,7 @@ if st.button("🚀 Iniciar Escaneo y Generar Prompt"):
                         resultado = analizar_y_estructurar_contenido(texto, enlace)
                         contenido_final += f"## Página: {enlace}\n\n{resultado}\n\n---\n\n"
                     barra.progress((i + 1) / max_paginas)
+                time.sleep(30)
 
         st.success("✅ Contenido estructurado correctamente")
         st.markdown("---")
@@ -193,5 +195,6 @@ if st.button("🚀 Iniciar Escaneo y Generar Prompt"):
             )
     else:
         st.error("Por favor, introduce una URL válida.")
+
 
 
