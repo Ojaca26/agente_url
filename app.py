@@ -9,9 +9,9 @@ from langchain.schema.output_parser import StrOutputParser
 import os
 
 # --- Configuración de la página ---
-st.set_page_config(page_title="Agente Web Scraper IA", page_icon="🤖")
-st.title("🤖 Agente IA Web Scraper")
-st.caption("Introduce la URL de un sitio web para extraer y ESTRUCTURAR su contenido.")
+st.set_page_config(page_title="Agente URL → Prompt Bot Asesor", page_icon="🤖")
+st.title("🤖 Agente IA – Generador de Prompt para Bot Asesor")
+st.caption("Escanea una URL, estructura su contenido y genera un prompt profesional para un chatbot de atención al cliente.")
 
 # --- Inicializar API de Gemini ---
 try:
@@ -19,29 +19,17 @@ try:
     os.environ["GOOGLE_API_KEY"] = api_key
     genai.configure(api_key=api_key)
 
-    # --- Diagnóstico visual ---
-    st.success("✅ Conectado al modelo Gemini correctamente (API v1 estable).")
-    st.write("🔐 Clave cargada correctamente.")
-
-    # --- Mostrar modelos disponibles (opcional para depuración) ---
-    try:
-        modelos = genai.list_models()
-        disponibles = [m.name for m in modelos]
-        st.write("📦 Modelos detectados por tu API key:", disponibles)
-    except Exception as e:
-        st.warning(f"No se pudieron listar los modelos: {e}")
-
-    # --- Inicializa el modelo principal ---
+    st.success("✅ Conectado correctamente al modelo Gemini.")
     llm = ChatGoogleGenerativeAI(
-        model="models/gemini-2.5-pro",  # 👈 usa multimodal si tu clave lo soporta
+        model="models/gemini-2.5-pro",
         google_api_key=api_key
     )
-
 except Exception as e:
-    st.error(f"❌ Error al configurar el modelo de IA: {e}")
+    st.error(f"❌ Error al configurar la API de Google: {e}")
     st.stop()
 
-# --- Funciones de Web Scraping ---
+
+# --- Funciones auxiliares ---
 def es_valido(url):
     parsed = urlparse(url)
     esquema_valido = bool(parsed.netloc) and bool(parsed.scheme)
@@ -81,11 +69,8 @@ def extraer_texto(url):
         return ""
 
 
-# --- Función IA para estructurar contenido ---
+# --- Paso 1: estructurar contenido ---
 def analizar_y_estructurar_contenido(texto_pagina, url):
-    if not texto_pagina:
-        return "No se encontró contenido textual para analizar."
-
     plantilla = """
     Eres un asistente de IA experto en analizar y documentar contenido web.
     Procesa el texto de la URL '{url}' y preséntalo completo, organizado por secciones.
@@ -99,25 +84,76 @@ def analizar_y_estructurar_contenido(texto_pagina, url):
     prompt = ChatPromptTemplate.from_template(plantilla)
     cadena = prompt | llm | StrOutputParser()
     texto_limitado = texto_pagina[:30000]
-
     try:
         return cadena.invoke({"texto": texto_limitado, "url": url})
     except Exception as e:
         st.warning(f"⚠️ Error procesando {url}: {e}")
-        return "⚠️ No se pudo estructurar el contenido de esta página."
+        return ""
 
 
-# --- Interfaz principal ---
-url_usuario = st.text_input("🔗 Introduce la URL del sitio web a escanear:", placeholder="https://ejemplo.com")
+# --- Paso 2: generar prompt final ---
+def generar_prompt_bot(nombre_empresa, link_empresa, contenido_total, guia_base):
+    plantilla_bot = f"""
+Eres un analista de IA especializado en crear prompts de asistentes virtuales.
 
-if st.button("🚀 Iniciar Escaneo"):
+Usa toda la información proporcionada del sitio web de la empresa **{nombre_empresa}** para generar un prompt completo y profesional para un **bot asesor y de servicio al cliente**. 
+
+Debes inspirarte en la siguiente guía estructural y adaptarla al contexto real de la empresa:
+
+---
+### Guía estructural del prompt del bot:
+{guia_base}
+---
+
+Ahora, con base en el contenido analizado y la estructura guía anterior, genera el **prompt final** personalizado para {nombre_empresa}.
+Incluye:
+- Descripción de la empresa y su propósito.
+- Reglas del chatbot.
+- Introducción y consentimiento.
+- Menú principal y subopciones.
+- Flujo conversacional con respuestas naturales y humanas.
+- Frases y tono guía.
+- Cierre amable y proactivo.
+
+Información base del sitio ({link_empresa}):
+---
+{contenido_total[:25000]}
+---
+"""
+    prompt = ChatPromptTemplate.from_template(plantilla_bot)
+    cadena = prompt | llm | StrOutputParser()
+    try:
+        return cadena.invoke({})
+    except Exception as e:
+        st.error(f"⚠️ Error generando el prompt del bot: {e}")
+        return "Error al generar el prompt del bot."
+
+
+# --- Entrada de usuario ---
+url_usuario = st.text_input("🌐 Introduce la URL del sitio web:", placeholder="https://ejemplo.com")
+nombre_empresa = st.text_input("🏢 Nombre de la empresa:", placeholder="Kravata")
+archivo_prompt = "prompt_kravata.txt"
+
+# --- Cargar guía base desde archivo ---
+try:
+    with open(archivo_prompt, "r", encoding="utf-8") as f:
+        guia_base = f.read()
+        st.success(f"📄 Guía base cargada desde '{archivo_prompt}' correctamente.")
+except Exception as e:
+    st.error(f"⚠️ No se pudo cargar la guía base '{archivo_prompt}': {e}")
+    st.stop()
+
+st.markdown("---")
+
+# --- Ejecución principal ---
+if st.button("🚀 Iniciar Escaneo y Generar Prompt"):
     if url_usuario and es_valido(url_usuario):
         with st.spinner('🔍 Buscando enlaces en la página principal...'):
             enlaces = list(obtener_enlaces_pagina(url_usuario))
             enlaces.insert(0, url_usuario)
             visitados, contenido_final = set(), f"# Reporte: {urlparse(url_usuario).netloc}\n\n"
 
-        max_paginas = st.slider("Número máximo de páginas a analizar:", 1, 20, 5)
+        max_paginas = st.slider("Número máximo de páginas a analizar:", 1, 15, 5)
         barra = st.progress(0)
 
         for i, enlace in enumerate(enlaces[:max_paginas]):
@@ -128,15 +164,31 @@ if st.button("🚀 Iniciar Escaneo"):
                     if texto:
                         resultado = analizar_y_estructurar_contenido(texto, enlace)
                         contenido_final += f"## Página: {enlace}\n\n{resultado}\n\n---\n\n"
-                        st.write(f"✅ Contenido estructurado para: {enlace}")
-                    else:
-                        st.write(f"⚠️ No se pudo extraer texto de: {enlace}")
-                barra.progress((i + 1) / max_paginas)
+                    barra.progress((i + 1) / max_paginas)
 
-        st.success("🎯 Escaneo completado")
+        st.success("✅ Contenido estructurado correctamente")
         st.markdown("---")
-        st.header("📄 Contenido Estructurado")
-        st.markdown(contenido_final)
+        st.header("📄 Contenido Analizado del Sitio")
+        st.markdown(contenido_final[:30000])
+
+        # Generar prompt final
+        st.header("🧠 Generando Prompt Personalizado del Bot...")
+        prompt_final = generar_prompt_bot(nombre_empresa, url_usuario, contenido_final, guia_base)
+
+        st.success("🎯 Prompt generado exitosamente")
+        st.text_area("📘 Prompt Final para el Bot", prompt_final, height=500)
+
+        # Guardar como archivo .txt
+        archivo_salida = f"Prompt_{nombre_empresa.replace(' ', '_')}.txt"
+        with open(archivo_salida, "w", encoding="utf-8") as f:
+            f.write(prompt_final)
+
+        with open(archivo_salida, "rb") as file:
+            st.download_button(
+                label="📥 Descargar Prompt (.txt)",
+                data=file,
+                file_name=archivo_salida,
+                mime="text/plain"
+            )
     else:
         st.error("Por favor, introduce una URL válida.")
-
